@@ -60,17 +60,26 @@ struct tss_struct {
 	long	eip;
 	long	eflags;
 	long	eax,ecx,edx,ebx;
-	long	esp;
-	long	ebp;
+	long	esp;		// stack point
+	long	ebp;		// base point
 	long	esi;
 	long	edi;
-	long	es;		/* 16 high bits zero */
-	long	cs;		/* 16 high bits zero */
-	long	ss;		/* 16 high bits zero */
-	long	ds;		/* 16 high bits zero */
-	long	fs;		/* 16 high bits zero */
+	long	es;		// extra segment  /* 16 high bits zero */
+	long	cs;		// code segment /* 16 high bits zero */
+	long	ss;		// stach segment /* 16 high bits zero */
+	long	ds;		// data segement  data roledata bss  /* 16 high bits zero */
+	long	fs;		// equal ds  data segment  /* 16 high bits zero */
+	/*
+		      ds           fs
+	用户态   用户数据段     用户数据段
+	内核态   内核数据段     用户数据段
+	*/
+
+
+
+
 	long	gs;		/* 16 high bits zero */
-	long	ldt;		/* 16 high bits zero */
+	long	ldt;	// local describe table 局部描述表	/* 16 high bits zero */
 	long	trace_bitmap;	/* bits: trace 0, bitmap 16-31 */
 	struct i387_struct i387;
 };
