@@ -36,6 +36,7 @@ void verify_area(void * addr,int size)
 	}
 }
 
+// nr process id
 int copy_mem(int nr,struct task_struct * p)
 {
 	unsigned long old_data_base,new_data_base,data_limit;
