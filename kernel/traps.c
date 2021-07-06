@@ -54,6 +54,7 @@ void invalid_TSS(void);
 void segment_not_present(void);
 void stack_segment(void);
 void general_protection(void);
+// AB fork 时候，一方执行write曹组时，，不在共享，页面异常中断，，处理写保护，，重新分配物理内存页，重新写
 void page_fault(void);
 void coprocessor_error(void);
 void reserved(void);

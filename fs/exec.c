@@ -66,6 +66,7 @@ static unsigned long * create_tables(char * p,int argc,int envc)
 		while (get_fs_byte(p++)) /* nothing */ ;
 	}
 	put_fs_long(0,envp);
+	// stack point  栈堆
 	return sp;
 }
 
@@ -156,8 +157,10 @@ static unsigned long change_ldt(unsigned long text_size,unsigned long * page)
 	unsigned long code_limit,data_limit,code_base,data_base;
 	int i;
 
+	// 代码段基址
 	code_limit = text_size+PAGE_SIZE -1;
 	code_limit &= 0xFFFFF000;
+	// 数据段
 	data_limit = 0x4000000;
 	code_base = get_base(current->ldt[1]);
 	data_base = code_base;
@@ -169,10 +172,14 @@ static unsigned long change_ldt(unsigned long text_size,unsigned long * page)
 	__asm__("pushl $0x17\n\tpop %%fs"::);
 	data_base += data_limit;
 	for (i=MAX_ARG_PAGES-1 ; i>=0 ; i--) {
+		// 放到数据段尾部
 		data_base -= PAGE_SIZE;
+		// 当前已分配的参数内存页放入
+		// 拷贝到数据段尾部
 		if (page[i])
 			put_page(page[i],data_base);
 	}
+	// 返回数据段长度
 	return data_limit;
 }
 
@@ -296,12 +303,14 @@ restart_interp:
 		goto restart_interp;
 	}
 	brelse(bh);
+	// 根据头文件信息，进行当前程序的判定
 	if (N_MAGIC(ex) != ZMAGIC || ex.a_trsize || ex.a_drsize ||
 		ex.a_text+ex.a_data+ex.a_bss>0x3000000 ||
 		inode->i_size < ex.a_text+ex.a_data+ex.a_syms+N_TXTOFF(ex)) {
 		retval = -ENOEXEC;
 		goto exec_error2;
 	}
+	// 文件投固定 1k
 	if (N_TXTOFF(ex) != BLOCK_SIZE) {
 		printk("%s: N_TXTOFF != BLOCK_SIZE. See a.out.h.", filename);
 		retval = -ENOEXEC;
@@ -316,20 +325,30 @@ restart_interp:
 		}
 	}
 /* OK, This is the point of no return */
+// 执行线程时，进程需要做的切换
+// 更新当前进程的执行程序inode节点
 	if (current->executable)
 		iput(current->executable);
 	current->executable = inode;
+	// 清空当前进程的执行信号处理函数置空
 	for (i=0 ; i<32 ; i++)
 		current->sigaction[i].sa_handler = NULL;
+	// 原线程指定执行后的文件关闭，，清空其位图
 	for (i=0 ; i<NR_OPEN ; i++)
 		if ((current->close_on_exec>>i)&1)
 			sys_close(i);
+	// 关闭执行进程  为 0
 	current->close_on_exec = 0;
+	// 释放原进程代码段和数据段
 	free_page_tables(get_base(current->ldt[1]),get_limit(0x0f));
 	free_page_tables(get_base(current->ldt[2]),get_limit(0x17));
+	// 释放原来进程的协处理器
 	if (last_task_used_math == current)
 		last_task_used_math = NULL;
 	current->used_math = 0;
+	
+	// 下面设置整个程序的内存映射，并且更新进程各段的长度
+	// 改变ldt
 	p += change_ldt(ex.a_text,page)-MAX_ARG_PAGES*PAGE_SIZE;
 	p = (unsigned long) create_tables((char *)p,argc,envc);
 	current->brk = ex.a_bss +
@@ -339,8 +358,10 @@ restart_interp:
 	current->euid = e_uid;
 	current->egid = e_gid;
 	i = ex.a_text+ex.a_data;
+	// 取整 清空  bss
 	while (i&0xfff)
 		put_fs_byte(0,(char *) (i++));
+	// eip 程序计数器
 	eip[0] = ex.a_entry;		/* eip, magic happens :-) */
 	eip[3] = p;			/* stack pointer */
 	return 0;

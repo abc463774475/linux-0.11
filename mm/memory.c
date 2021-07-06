@@ -30,12 +30,14 @@
 
 volatile void do_exit(long code);
 
+// out of memory 内存溢出
 static inline volatile void oom(void)
 {
 	printk("out of memory\n\r");
 	do_exit(SIGSEGV);
 }
 
+// tlb 转移存储表  翻译为页表缓存、转址旁路缓存，为CPU的一种缓存  寄存器
 #define invalidate() \
 __asm__("movl %%eax,%%cr3"::"a" (0))
 
@@ -59,6 +61,7 @@ static unsigned char mem_map [ PAGING_PAGES ] = {0,};
 /*
  * Get physical address of first (actually last :-) free page, and mark it
  * used. If no free pages left, return 0.
+ * 空白内存页获取
  */
 unsigned long get_free_page(void)
 {
@@ -85,6 +88,7 @@ return __res;
 /*
  * Free a page of memory at physical address 'addr'. Used by
  * 'free_page_tables()'
+ * 释放物理内存页
  */
 void free_page(unsigned long addr)
 {
@@ -101,6 +105,12 @@ void free_page(unsigned long addr)
 /*
  * This function frees a continuos block of page tables, as needed
  * by 'exit()'. As does copy_page_tables(), this handles only 4Mb blocks.
+ * 释放指定线性地址的一段内存
+ * 1 把线性地址映射为目录项
+ * 2 把目录项映射为目录项地址
+ * 3 从目录项地址取页表地址
+ * 4 进行页表项地址操作
+ * 5 针对物理内存操作
  */
 int free_page_tables(unsigned long from,unsigned long size)
 {
@@ -116,6 +126,9 @@ int free_page_tables(unsigned long from,unsigned long size)
 	for ( ; size-->0 ; dir++) {
 		if (!(1 & *dir))
 			continue;
+		/*
+			4k 取整
+		*/
 		pg_table = (unsigned long *) (0xfffff000 & *dir);
 		for (nr=0 ; nr<1024 ; nr++) {
 			if (1 & *pg_table)
@@ -123,9 +136,12 @@ int free_page_tables(unsigned long from,unsigned long size)
 			*pg_table = 0;
 			pg_table++;
 		}
+		// 释放页表项占用内存
 		free_page(0xfffff000 & *dir);
+		// 页目录项置为0
 		*dir = 0;
 	}
+	// 更新tlb中的缓冲
 	invalidate();
 	return 0;
 }
@@ -146,6 +162,8 @@ int free_page_tables(unsigned long from,unsigned long size)
  * doesn't take any more memory - we don't copy-on-write in the low
  * 1 Mb-range, so the pages can be shared with the kernel. Thus the
  * special case for nr=xxxx.
+ * 
+ * 拷贝线性地址空间，从一个线性地址拷贝到另一个线性地址空间
  */
 int copy_page_tables(unsigned long from,unsigned long to,long size)
 {
@@ -157,28 +175,38 @@ int copy_page_tables(unsigned long from,unsigned long to,long size)
 
 	if ((from&0x3fffff) || (to&0x3fffff))
 		panic("copy_page_tables called with wrong alignment");
+	// 目录项地址
 	from_dir = (unsigned long *) ((from>>20) & 0xffc); /* _pg_dir = 0 */
 	to_dir = (unsigned long *) ((to>>20) & 0xffc);
+	// 拷贝地址大小
 	size = ((unsigned) (size+0x3fffff)) >> 22;
 	for( ; size-->0 ; from_dir++,to_dir++) {
 		if (1 & *to_dir)
 			panic("copy_page_tables: already exist");
 		if (!(1 & *from_dir))
 			continue;
+		// 页表地址
 		from_page_table = (unsigned long *) (0xfffff000 & *from_dir);
+		// 个体 to 的页表申请一块物理内存
 		if (!(to_page_table = (unsigned long *) get_free_page()))
 			return -1;	/* Out of memory, see freeing */
+		// 转换地址 并且权限置为7  111
 		*to_dir = ((unsigned long) to_page_table) | 7;
 		nr = (from==0)?0xA0:1024;
+		// 设置对应的页表的页表项
 		for ( ; nr-- > 0 ; from_page_table++,to_page_table++) {
 			this_page = *from_page_table;
 			if (!(1 & this_page))
 				continue;
+			// ~2  掩码  权限问题 设置其为只读权限
 			this_page &= ~2;
+			// 复制给新的页表项
 			*to_page_table = this_page;
+			// 复制给旧的项
 			if (this_page > LOW_MEM) {
 				*from_page_table = this_page;
 				this_page -= LOW_MEM;
+				// 计算当前物理内存地址对应的为第几个你内存页
 				this_page >>= 12;
 				mem_map[this_page]++;
 			}
