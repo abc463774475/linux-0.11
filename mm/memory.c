@@ -38,6 +38,7 @@ static inline volatile void oom(void)
 }
 
 // tlb 转移存储表  翻译为页表缓存、转址旁路缓存，为CPU的一种缓存  寄存器
+// 刷新自己协处理器  tlb
 #define invalidate() \
 __asm__("movl %%eax,%%cr3"::"a" (0))
 
@@ -45,9 +46,10 @@ __asm__("movl %%eax,%%cr3"::"a" (0))
 #define LOW_MEM 0x100000
 #define PAGING_MEMORY (15*1024*1024)
 #define PAGING_PAGES (PAGING_MEMORY>>12)
-#define MAP_NR(addr) (((addr)-LOW_MEM)>>12)
+#define MAP_NR(addr) (((addr)-LOW_MEM)>>12)   // 物理地址
 #define USED 100
 
+// 给的的线性地址是否在当前的代码中
 #define CODE_SPACE(addr) ((((addr)+4095)&~4095) < \
 current->start_code + current->end_code)
 
@@ -117,10 +119,21 @@ int free_page_tables(unsigned long from,unsigned long size)
 	unsigned long *pg_table;
 	unsigned long * dir, nr;
 
+	/* 
+		0x3fffff  4MB 这玩意 看不懂 
+		addr 0x1000  & 0x3fffff != 0 
+	*/
 	if (from & 0x3fffff)
 		panic("free_page_tables called with wrong alignment");
 	if (!from)
 		panic("Trying to free up swapper memory space");
+	/* 
+		对应要释放的目录项个数
+		size = 0xf   16B
+
+		
+
+	*/
 	size = (size + 0x3fffff) >> 22;
 	dir = (unsigned long *) ((from>>20) & 0xffc); /* _pg_dir = 0 */
 	for ( ; size-->0 ; dir++) {

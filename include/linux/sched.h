@@ -235,6 +235,7 @@ __base;})
 
 #define get_base(ldt) _get_base( ((char *)&(ldt)) )
 
+// 长度限制
 #define get_limit(segment) ({ \
 unsigned long __limit; \
 __asm__("lsll %1,%0\n\tincl %0":"=r" (__limit):"r" (segment)); \
